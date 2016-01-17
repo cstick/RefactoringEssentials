@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.CodeAnalysis.Text;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,6 +28,66 @@ namespace RefactoringEssentials.Tests.Common
                 }
             }
             return sb.ToString();
+        }
+
+        internal static string ParseText(string input, out TextSpan selectedSpan, out TextSpan markedSpan)
+        {
+            int start = -1, end = -1;
+            int start2 = -1, end2 = -1;
+            var result = new StringBuilder(input.Length);
+            int upper = input.Length - 1;
+            for (int i = 0; i < upper; i++)
+            {
+                var ch = input[i];
+                if (ch == '$' && (i + 1 >= upper || input[i + 1] != '"') || ch == '…')
+                {
+                    start = end = i;
+                    continue;
+                }
+                if (ch == '<' && input[i + 1] == '-')
+                {
+                    start = i;
+                    i++;
+                    continue;
+                }
+                if (ch == '-' && input[i + 1] == '>')
+                {
+                    end = i;
+                    i++;
+                    continue;
+                }
+
+                if (ch == '-' && input[i + 1] == '[')
+                {
+                    start2 = result.Length;
+                    i++;
+                    continue;
+                }
+                if (ch == ']' && input[i + 1] == '-')
+                {
+                    end2 = result.Length;
+                    i++;
+                    continue;
+                }
+                result.Append(ch);
+            }
+
+            if (upper >= 0)
+            {
+                var lastChar = input[upper];
+                if (lastChar == '$')
+                {
+                    start = end = upper;
+                }
+                else
+                {
+                    result.Append(lastChar);
+                }
+            }
+
+            selectedSpan = start < 0 ? new TextSpan() : TextSpan.FromBounds(start, end);
+            markedSpan = start2 < 0 ? new TextSpan() : TextSpan.FromBounds(start2, end2);
+            return result.ToString();
         }
     }
 }
