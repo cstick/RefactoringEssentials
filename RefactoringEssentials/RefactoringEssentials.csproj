@@ -44,10 +44,16 @@
     <IncludeCopyLocalReferencesInVSIXContainer>false</IncludeCopyLocalReferencesInVSIXContainer>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Common\CodeContractsCodeRefactoringProvider.cs" />
     <Compile Include="Common\NotPortedYetAttribute.cs" />
+    <Compile Include="Converter\CodeConverter.cs" />
+    <Compile Include="Converter\CodeWithOptions.cs" />
+    <Compile Include="Converter\ConversionResult.cs" />
     <Compile Include="CSharp\CodeRefactorings\Custom\AddNullCheckCodeRefactoringProvider.cs" />
     <Compile Include="CSharp\CodeRefactorings\Synced\ContractRequiresNotNullCodeRefactoringProvider.cs" />
+    <Compile Include="CSharp\CodeRefactorings\Synced\ContractEnsuresNotNullReturnRefactoringProvider.cs" />
     <Compile Include="CSharp\CodeRefactorings\Synced\MergeNestedIfAction.cs" />
+    <Compile Include="CSharp\ConvertUnitTestToVB.cs" />
     <Compile Include="CSharp\CodeRefactorings\Uncategorized\InlineMethodAction.cs" />
     <Compile Include="CSharp\SyntaxExtensions.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -544,6 +550,7 @@
     <Compile Include="Util\TokenComparer.cs" />
     <Compile Include="Util\NamespaceDeclarationSyntaxExtensions.cs" />
     <Compile Include="VB\CodeRefactorings\AddAnotherAccessorCodeRefactoringProvider.cs" />
+    <Compile Include="VB\CodeRefactorings\AddCheckForNothingCodeRefactoringProvider.cs" />
     <Compile Include="VB\CodeRefactorings\CheckIfParameterIsNothingCodeRefactoringProvider.cs" />
     <Compile Include="VB\CodeRefactorings\ComputeConstantValueCodeRefactoringProvider.cs" />
     <Compile Include="VB\CodeRefactorings\ConvertDecToHexCodeRefactoringProvider.cs" />
@@ -561,6 +568,10 @@
     <Compile Include="VB\CodeRefactorings\InvertLogicalExpressionCodeRefactoringProvider.cs" />
     <Compile Include="VB\CodeRefactorings\ReplaceDirectCastWithSafeCastCodeRefactoringProvider.cs" />
     <Compile Include="VB\CodeRefactorings\ReplaceSafeCastWithDirectCastCodeRefactoringProvider.cs" />
+    <Compile Include="VB\Converter\ConversionExtensions.cs" />
+    <Compile Include="VB\Converter\CSharpConverter.cs" />
+    <Compile Include="VB\Converter\MethodBodyVisitor.cs" />
+    <Compile Include="VB\Converter\NodesVisitor.cs" />
     <Compile Include="VB\Diagnostics\Custom\NameOfSuggestionAnalyzer.cs" />
     <Compile Include="VB\Diagnostics\Custom\NameOfSuggestionCodeFixProvider.cs" />
     <Compile Include="VB\Diagnostics\VBDiagnosticIDs.cs" />
@@ -570,27 +581,27 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CodeAnalysis, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.CodeAnalysis.Common.1.1.0-rc1\lib\portable-net45+win8\Microsoft.CodeAnalysis.dll</HintPath>
+      <HintPath>..\packages\Microsoft.CodeAnalysis.Common.1.1.0\lib\portable-net45+win8\Microsoft.CodeAnalysis.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.CodeAnalysis.CSharp.1.1.0-rc1\lib\portable-net45+win8\Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <HintPath>..\packages\Microsoft.CodeAnalysis.CSharp.1.1.0\lib\portable-net45+win8\Microsoft.CodeAnalysis.CSharp.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.CSharp.Workspaces, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.CodeAnalysis.CSharp.Workspaces.1.1.0-rc1\lib\portable-net45+win8\Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
+      <HintPath>..\packages\Microsoft.CodeAnalysis.CSharp.Workspaces.1.1.0\lib\portable-net45+win8\Microsoft.CodeAnalysis.CSharp.Workspaces.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.VisualBasic, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.CodeAnalysis.VisualBasic.1.1.0-rc1\lib\portable-net45+win8\Microsoft.CodeAnalysis.VisualBasic.dll</HintPath>
+      <HintPath>..\packages\Microsoft.CodeAnalysis.VisualBasic.1.1.0\lib\portable-net45+win8\Microsoft.CodeAnalysis.VisualBasic.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.CodeAnalysis.VisualBasic.Workspaces.1.1.0-rc1\lib\portable-net45+win8\Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll</HintPath>
+      <HintPath>..\packages\Microsoft.CodeAnalysis.VisualBasic.Workspaces.1.1.0\lib\portable-net45+win8\Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CodeAnalysis.Workspaces, Version=1.1.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.CodeAnalysis.Workspaces.Common.1.1.0-rc1\lib\portable-net45+win8\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
+      <HintPath>..\packages\Microsoft.CodeAnalysis.Workspaces.Common.1.1.0\lib\portable-net45+win8\Microsoft.CodeAnalysis.Workspaces.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System.Collections.Immutable, Version=1.1.37.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
@@ -655,6 +666,7 @@
       <DependentUpon>RefactoringEssentials.tt</DependentUpon>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="Util\Reflection.md" />
     <None Include="Versioning.t4.template">
       <LastGenOutput>Versioning.cs.cs</LastGenOutput>
     </None>
@@ -686,8 +698,8 @@
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
   <ItemGroup>
-    <Analyzer Include="..\packages\Microsoft.CodeAnalysis.Analyzers.1.1.0-beta1-20150812-01\analyzers\dotnet\cs\Microsoft.CodeAnalysis.Analyzers.dll" />
-    <Analyzer Include="..\packages\Microsoft.CodeAnalysis.Analyzers.1.1.0-beta1-20150812-01\analyzers\dotnet\cs\Microsoft.CodeAnalysis.CSharp.Analyzers.dll" />
+    <Analyzer Include="..\packages\Microsoft.CodeAnalysis.Analyzers.1.1.0\analyzers\dotnet\cs\Microsoft.CodeAnalysis.Analyzers.dll" />
+    <Analyzer Include="..\packages\Microsoft.CodeAnalysis.Analyzers.1.1.0\analyzers\dotnet\cs\Microsoft.CodeAnalysis.CSharp.Analyzers.dll" />
   </ItemGroup>
   <ProjectExtensions>
     <MonoDevelop>

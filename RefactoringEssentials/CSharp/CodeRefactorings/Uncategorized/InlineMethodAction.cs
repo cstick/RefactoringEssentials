@@ -108,7 +108,7 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
                 methodBody = returnStatement.Expression;
             }
 
-            //var documentChanges = new List<DocumentChange>();
+            var documentChanges = new List<DocumentChange>();
 
             var references = SymbolFinder.FindReferencesAsync(methodSymbol, sln).Result;
 

@@ -212,8 +212,8 @@ namespace RefactoringEssentials.Tests.Common
 
         public static void AssertEqual(Solution expected, Solution actual)
         {
-            var expectedSln = expected.CurrentSolution;
-            var actualSln = actual.CurrentSolution;
+            var expectedSln = expected;
+            var actualSln = actual;
 
             if (expectedSln.Projects.Count() != actualSln.Projects.Count())
                 Assert.Fail($"Project counts do not match. Expected; {expectedSln.Projects.Count()}, Actual: {actualSln.Projects.Count()}.");
