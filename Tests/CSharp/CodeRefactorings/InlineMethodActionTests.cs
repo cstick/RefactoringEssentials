@@ -1,26 +1,172 @@
 ﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Formatting;
-using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Host.Mef;
-using Microsoft.CodeAnalysis.Text;
 using NUnit.Framework;
 using RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized;
 using RefactoringEssentials.Tests.Common;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
 {
     [TestFixture]
     public class InlineMethodActionTests : CSharpCodeRefactoringTestBase
     {
+        [Test]
+        [Description("Do not suggest refactoring unless the cursor is over the method signature (excluding arguments).")]
+        public void DoesNotRefactorWhenNotOnMethodSignature()
+        {
+            TestWrongContext<InlineMethodAction>(
+@"
+class Animal
+{
+    public void Foo() {
+        var x = Bar(5, 1);
+    }
+
+    public int Bar(int a, int b) {
+        //// Simple math.
+        return $(a + b);
+    }
+
+}");
+
+            TestWrongContext<InlineMethodAction>(
+@"
+class Animal
+{
+    public void Foo() {
+        var x = Bar(5, 1);
+    }
+
+    public int Bar(int a, int b) {
+        //// Simple math.
+        $return (a + b);
+    }
+
+}");
+
+            TestWrongContext<InlineMethodAction>(
+@"
+class Animal
+{
+    public void Foo() {
+        var x = Bar(5, 1);
+    }
+
+    public int Bar(int a, int $b) {
+        //// Simple math.
+        return (a + b);
+    }
+
+}");
+        }
 
         [Test]
-        [Description("Test that only event field declarations are refactored.")]
-        public void InlineSimpleMethod()
+        [Description("Do not inline a method with errors, that would just make more errors.")]
+        public void DoesNotRefactorMethodWithErrors()
+        {
+            TestWrongContext<InlineMethodAction>(
+@"
+class Animal
+{
+    public void Foo() {
+        var x = Bar(5, 1);
+    }
+
+    public int $Bar(int a, int b) {
+        //// Simple math.
+        return (a + b) This is invalid syntax!;
+    }
+
+}");
+        }
+
+        [Test]
+        [Description("Do not inline an external public method. It may be referenced externally and refactoring may be breaking.")]
+        public void DoesNotRefactorPublicExternalMethods()
+        {
+            TestWrongContext<InlineMethodAction>(
+@"
+public class Animal
+{
+    public void Foo() {
+        var x = Bar(5, 1);
+    }
+
+    public int $Bar(int a, int b) {
+        //// Simple math.
+        return (a + b);
+    }
+
+}");
+        }
+
+        [Test]
+        [Description("Do not inline a method without any references, that is not our interest.")]
+        public void DoesNotRefactorUnreferencedMethods()
+        {
+            TestWrongContext<InlineMethodAction>(
+@"
+class Animal
+{
+
+    // Method without any references.
+    public int $Bar(int a, int b) {
+        //// Simple math.
+        return (a + b);
+    }
+}");
+        }
+
+        [Test]
+        [Description("Do not inline a method with more than 1 line of code. This test may be invalid as the capability of method inlining is expanded.")]
+        public void DoesNotRefactorComplexMethod()
+        {
+            TestWrongContext<InlineMethodAction>(
+@"
+class Animal
+{
+    public void Foo() {
+        var x = Bar(1, 2);
+    }
+
+    // A complex method, one with multiple lines of code.
+    public int $Bar(int a, int b) {
+        //// Simple math.
+        var result = (a + b);
+        return result;
+    }
+}");
+        }
+
+        [Test]
+        [Description("Test that inline method is not refactored when contains internal member access.")]
+        public void DoNotInlineMethodBecauseOfInternalMemberAccess()
+        {
+            TestWrongContext<InlineMethodAction>(
+@"class Dog : Animal {
+    
+    public void DoLegs() {
+        AddLeg();
+        AddLeg();
+        AddLeg();
+        AddLeg();
+    }
+}
+
+class Animal
+{
+    private int legs = 0;
+    
+    protected void $AddLeg() {
+        //// Simple math.
+        legs++;
+    }
+
+}");
+        }
+
+        [Test]
+        [Description("Inline a method with return type.")]
+        public void InlineReturnMethod()
         {
             Test<InlineMethodAction>(
 @"class TestClass
@@ -45,8 +191,34 @@ namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
         }
 
         [Test]
-        [Description("Test that only event field declarations are refactored.")]
-        public void InlineSimpleMethodMultipleReferences()
+        [Description("Inline a method without return type.")]
+        public void InlineVoidMethod()
+        {
+            Test<InlineMethodAction>(
+@"class TestClass
+{
+    public void Foo() {
+        Bar(5, 1);
+    }
+
+    public void $Bar(int a, int b) {
+        //// Simple math.
+        Console.Writeline(a + b);
+    }
+
+}",
+@"class TestClass
+{
+    public void Foo() {
+        Console.Writeline(5 + 1);
+    }
+
+}");
+        }
+        
+        [Test]
+        [Description("Inline a method with multiple references.")]
+        public void InlineMethodWithMultipleReferences()
         {
             Test<InlineMethodAction>(
 @"class TestClass
@@ -72,8 +244,8 @@ namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
         }
 
         [Test]
-        [Description("Test that only event field declarations are refactored.")]
-        public void InlineSimpleMethodWithOptionalParam()
+        [Description("Inline a method with optional parameters.")]
+        public void InlineMethodWithOptionalParam()
         {
             Test<InlineMethodAction>(
 @"class TestClass
@@ -98,7 +270,7 @@ namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
         }
 
         [Test]
-        [Description("Test that only event field declarations are refactored.")]
+        [Description("Overly complicated test to ensure refactorings cross documents.")]
         public void MultipleDocumentTest()
         {
             var solutionId = SolutionId.CreateNewId();
@@ -109,6 +281,7 @@ namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
             var document2Id = DocumentId.CreateNewId(projectId);
             var document2Name = "ClassB";
 
+            // Create Test Workspace
             var testSolution = CSharpHelpers.CreateSolution(solutionId, new[] {
                 CSharpHelpers.CreateProject(projectId, projectName, new[] {
                     CSharpHelpers.CreateDocument(document1Id, document1Name,
@@ -136,6 +309,10 @@ namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
 }") })
                 });
 
+            var w = new AdhocWorkspace(MefHostServices.DefaultHost, "Temp");
+            w.AddSolution(testSolution);
+
+            // Create expected workspace
             var expSolution = CSharpHelpers.CreateSolution(
                 solutionId,
                 new[] {
@@ -164,21 +341,15 @@ namespace RefactoringEssentials.Tests.CSharp.CodeRefactorings
 }")
                         })
             });
-            
-            var w = new AdhocWorkspace(MefHostServices.DefaultHost, "Temp");
-            w.AddSolution(testSolution);
-
-            var alteredWorkspace = CSharpHelpers.RunContextAction<InlineMethodAction>(w);
 
             var expWorkspace = new AdhocWorkspace();
             expWorkspace.AddSolution(expSolution);
 
-            CSharpHelpers.AssertEqual(expWorkspace, alteredWorkspace);
-        }
+            // Run action
+            var alteredWorkspace = CSharpHelpers.RunContextAction<InlineMethodAction>(w);
 
-        public static int Foo(int a, int b = 0)
-        {
-            return (a + b);
+            // Assert expected workspace equals altered workspace.
+            CSharpHelpers.AssertEqual(expWorkspace, alteredWorkspace);
         }
 
     }

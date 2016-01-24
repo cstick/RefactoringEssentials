@@ -36,8 +36,8 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
             var node = root.FindNode(span);
             if (node == null)
                 return;
-            // MethodDeclaration, InvocationExpression
 
+            // MethodDeclaration, InvocationExpression
             var method = node as MethodDeclarationSyntax;
 
             if (method == null)
@@ -45,54 +45,99 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
                 method = (node?.Parent ?? null) as MethodDeclarationSyntax;
             }
 
-            if (method != null)
+            // Ensure we are testing at a method signature.
+            if (method == null)
+                return;
+
+            // Ensure the method does not have errors.
+            if (method.ContainsDiagnostics)
+                return;
+
+            var methodSymbol = model.GetDeclaredSymbol(method);
+            var methodContainer = methodSymbol.ContainingType;
+
+            // If the method is public then it may be referenced externally.
+            // This is subjective and some may disagree with this choice of behavior.
+            var isPublic = true;
+            ISymbol cs = methodSymbol;
+            do
             {
-                if (method.ContainsDiagnostics)
-                    return;
+                if (cs.DeclaredAccessibility == Accessibility.Public ||
+                    cs.DeclaredAccessibility == Accessibility.NotApplicable)
+                    cs = cs.ContainingSymbol;
+                else
+                    isPublic = false;
 
-                var methodSymbol = model.GetDeclaredSymbol(method);
+            } while (isPublic && cs != null);
 
-                // If the method is public then it may be referenced externally.
-                // This is subjective and some may disagree with this choice of behavior.
-                var isPublic = true;
-                ISymbol cs = methodSymbol;
-                do
+            if (isPublic)
+                return;
+
+            // Get references to the method.
+            var methodReferences = await SymbolFinder.FindReferencesAsync(methodSymbol, document.Project.Solution, cancellationToken).ConfigureAwait(false);
+
+            // Ensure there are references.
+            if (!methodReferences.Any())
+                return;
+            // Ensure the reference has locations.
+            if (!methodReferences.First().Locations.Any())
+                return;
+
+            // Ensure the method body is simple.
+            var isSimpleMethodBody = method.Body.Statements.Count() == 1;
+
+            if (!isSimpleMethodBody)
+                return;
+
+            // Are any references made from external types?
+            var hasExternalReferences = methodReferences.Any(r =>
+           {
+               return r.Locations.Any(l =>
+               {
+                   var refType = model.GetEnclosingNamedType(l.Location.SourceSpan.Start, cancellationToken);
+                   return (refType != methodContainer);
+               });
+           });
+
+            // Ensure the method body does not reference internal members.
+            if (hasExternalReferences)
+            {
+                var statement = method.Body.Statements.First();
+                var descendents = statement.DescendantNodes();
+                foreach (var descendent in descendents)
                 {
-                    if (cs.DeclaredAccessibility == Accessibility.Public ||
-                        cs.DeclaredAccessibility == Accessibility.NotApplicable)
-                        cs = cs.ContainingSymbol;
-                    else
-                        isPublic = false;
+                    var descendentSymbol = model.GetSymbolInfo(descendent);
 
-                } while (isPublic && cs != null);
-
-                if (isPublic)
-                    return;
-
-                // Get references to the method.
-                var methodReferences = await SymbolFinder.FindReferencesAsync(methodSymbol, document.Project.Solution, cancellationToken).ConfigureAwait(false);
-
-                // Ensure there are references.
-                if (!methodReferences.Any())
-                    return;
-
-                var isSimpleMethodBody = method.Body.Statements.Count() == 1;
-
-                if (isSimpleMethodBody)
-                {
-                    context.RegisterRefactoring(
-                        CodeAction.Create(
-                            "Inline Method",
-                            ct => ProcessMethodDeclarationAsync(
-                                document.Project.Solution,
-                                methodSymbol,
-                                method,
-                                ct)));
+                    if (descendentSymbol.Symbol != null)
+                    {
+                        if (descendentSymbol.Symbol.ContainingType == methodContainer)
+                        {
+                            return;
+                        }
+                    }
                 }
             }
+
+            context.RegisterRefactoring(
+                CodeAction.Create(
+                    "Inline Method",
+                    ct => InlineMethodAsync(
+                        document.Project.Solution,
+                        methodSymbol,
+                        method,
+                        ct)));
+
         }
 
-        async Task<Solution> ProcessMethodDeclarationAsync(
+        /// <summary>
+        /// Inline a method.
+        /// </summary>
+        /// <param name="sln"></param>
+        /// <param name="methodSymbol"></param>
+        /// <param name="method"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        async Task<Solution> InlineMethodAsync(
             Solution sln,
             ISymbol methodSymbol,
             MethodDeclarationSyntax method,
@@ -107,8 +152,13 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
                 var returnStatement = methodBody as ReturnStatementSyntax;
                 methodBody = returnStatement.Expression;
             }
+            else if (methodBody.IsKind(SyntaxKind.ExpressionStatement))
+            {
+                var statement = methodBody as ExpressionStatementSyntax;
+                methodBody = statement.Expression;
+            }
 
-            var documentChanges = new List<DocumentChange>();
+            methodBody = methodBody.WithoutTrivia();
 
             var references = SymbolFinder.FindReferencesAsync(methodSymbol, sln).Result;
 
@@ -125,17 +175,6 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
 
                 foreach (var g in groupedByDocument)
                 {
-                    //var dc = documentChanges.FirstOrDefault(i => Equals(g.Document.Id, i.Document.Id));
-
-                    //if (dc == null)
-                    //{
-                    //    dc = new DocumentChange();
-                    //    dc.Document = sln.GetDocument(g.Document.Id);
-                    //    dc.Model = await dc.Document.GetSemanticModelAsync(ct);
-                    //    dc.Root = await dc.Model.SyntaxTree.GetRootAsync(ct);
-                    //    documentChanges.Add(dc);
-                    //}
-
                     var document = sln.GetDocument(g.Document.Id);
                     var model = await document.GetSemanticModelAsync(ct);
                     var root = await model.SyntaxTree.GetRootAsync(ct);
@@ -168,11 +207,6 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
                 }
             }
 
-            foreach (var dc in documentChanges)
-            {
-                sln = sln.WithDocumentSyntaxRoot(dc.Document.Id, dc.Root);
-            }
-
             methodSymbol = SymbolFinder.FindSourceDeclarationsAsync(sln, methodSymbol.Name, true, ct).Result.Single();
             references = SymbolFinder.FindReferencesAsync(methodSymbol, sln).Result;
 
@@ -190,14 +224,6 @@ namespace RefactoringEssentials.CSharp.CodeRefactorings.Uncategorized
             }
 
             return await Task.FromResult(sln);
-        }
-
-        class DocumentChange
-        {
-            public Document Document { get; set; }
-            public SemanticModel Model { get; set; }
-            public SyntaxNode Root { get; set; }
-
         }
 
         void ProcessInvocationExpression()
